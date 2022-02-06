@@ -1,3 +1,5 @@
+import argparse
+import csv
 import enum
 import itertools
 import operator
@@ -179,3 +181,39 @@ def sorted_grouped_calls(
             key=first
     ):
         yield time, tuple(map(second, group))
+
+COLORS: tuple[str, ...] = ('green', 'yellow', 'red')
+
+parser = argparse.ArgumentParser(
+    description='generate controller code from a light pattern',
+)
+parser.add_argument(
+    'patternfile',
+    help='file containing light pattern',
+)
+parser.add_argument(
+    'codefile',
+    help='generated file containing controller code',
+)
+args = parser.parse_args()
+
+with open(args.patternfile, 'r', newline='') as f, \
+        open(args.codefile, 'w') as g:
+    reader = csv.reader(f)
+    durations: tuple[float, ...] = tuple(map(float, next(reader)))
+    time: float
+    calls: tuple[str, ...]
+    for time, calls in sorted_grouped_calls(*(
+            timed_calls(
+                timed_switches(durations, light_switches(light_states(row))),
+                on=f'turn_{color}_on',
+                off=f'turn_{color}_off'
+            ) for color, row in zip(COLORS, reader)
+    )):
+        g.write(str(time))
+        g.write('\n')
+        call: str
+        for call in calls:
+            g.write('    ')
+            g.write(call)
+            g.write('\n')

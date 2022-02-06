@@ -1,5 +1,6 @@
 import argparse
 import csv
+import datetime
 import enum
 import itertools
 import operator
@@ -86,10 +87,10 @@ def light_switches(
             raise RuntimeError
         state = next_state
 
-TimedSwitch = tuple[float, LightSwitch]
+TimedSwitch = tuple[datetime.timedelta, LightSwitch]
 
 def timed_switches(
-        durations: typing.Iterable[float],
+        durations: typing.Iterable[datetime.timedelta],
         switches: typing.Iterable[typing.Optional[LightSwitch]]
 ) -> typing.Iterator[TimedSwitch]:
     '''
@@ -104,29 +105,29 @@ def timed_switches(
 
     Yields
     ------
-    float
+    datetime.timedelta
         Time since start of first block.
     switch
         Switch to make at the time.
     '''
 
-    time: float
+    time: datetime.timedelta
     switch: typing.Optional[LightSwitch]
     for time, switch in zip(
-            itertools.accumulate(durations, initial=0),
+            itertools.accumulate(durations, initial=datetime.timedelta()),
             switches
     ):
         if switch is not None:
             yield time, switch
 
-TimedCall = tuple[float, str]
+TimedCall = tuple[datetime.timedelta, str]
 
 def timed_calls(
         timed_switches: typing.Iterable[TimedSwitch],
         *,
         on: str,
         off: str
-) -> typing.Iterable[tuple[float, str]]:
+) -> typing.Iterable[tuple[datetime.timedelta, str]]:
     '''
     Generated timed function calls.
 
@@ -147,14 +148,14 @@ def timed_calls(
 
     calls: dict[LightSwitch, str] = {LightSwitch.ON: on, LightSwitch.OFF: off}
 
-    time: float
+    time: datetime.timedelta
     switch: LightSwitch
     for time, switch in timed_switches:
         yield time, calls[switch]
 
 def sorted_grouped_calls(
         *args: typing.Iterable[TimedCall]
-) -> typing.Iterator[tuple[float, tuple[str, ...]]]:
+) -> typing.Iterator[tuple[datetime.timedelta, tuple[str, ...]]]:
     '''
     Group function calls by (ordered) time.
 
@@ -165,16 +166,17 @@ def sorted_grouped_calls(
 
     Yields
     ------
-    float
+    datetime.timedelta
         Time to call functions atl.
     tuple[str, ...]
         Functions to call at the time.
     '''
 
-    first: typing.Callable[[TimedCall], float] = operator.itemgetter(0)
+    first: typing.Callable[[TimedCall], datetime.timedelta] = \
+        operator.itemgetter(0)
     second: typing.Callable[[TimedCall], str] = operator.itemgetter(1)
 
-    time: float
+    time: datetime.timedelta
     group: typing.Iterator[TimedCall]
     for time, group in itertools.groupby(
             sorted(itertools.chain(*args), key=first),
@@ -200,8 +202,10 @@ args = parser.parse_args()
 with open(args.patternfile, 'r', newline='') as f, \
         open(args.codefile, 'w') as g:
     reader = csv.reader(f)
-    durations: tuple[float, ...] = tuple(map(float, next(reader)))
-    time: float
+    durations: tuple[datetime.timedelta, ...] = tuple(
+        datetime.timedelta(seconds=s) for s in map(float, next(reader))
+    )
+    time: datetime.timedelta
     calls: tuple[str, ...]
     for time, calls in sorted_grouped_calls(*(
             timed_calls(

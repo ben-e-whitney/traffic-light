@@ -1,4 +1,5 @@
 import enum
+import itertools
 import operator
 import typing
 
@@ -67,7 +68,10 @@ def light_switches(
         raise ValueError("'LightState' iterable must be nonempty.")
     if state == LightState.UNDETERMINED:
         raise ValueError("First 'LightState' cannot be 'UNDETERMINED'.")
-    yield state
+    yield {
+        LightState.ON: LightSwitch.ON,
+        LightState.OFF: LightSwitch.OFF,
+    }[state]
     next_state: LightState
     for next_state in states_:
         if next_state == state or next_state == LightState.UNDETERMINED:
@@ -79,3 +83,99 @@ def light_switches(
         else:
             raise RuntimeError
         state = next_state
+
+TimedSwitch = tuple[float, LightSwitch]
+
+def timed_switches(
+        durations: typing.Iterable[float],
+        switches: typing.Iterable[typing.Optional[LightSwitch]]
+) -> typing.Iterator[TimedSwitch]:
+    '''
+    Generate timed light switches.
+
+    Parameters
+    ----------
+    durations
+        Durations for temporal blocks.
+    switches
+        Switches to make at the beginning of the corresponding temporal block.
+
+    Yields
+    ------
+    float
+        Time since start of first block.
+    switch
+        Switch to make at the time.
+    '''
+
+    time: float
+    switch: typing.Optional[LightSwitch]
+    for time, switch in zip(
+            itertools.accumulate(durations, initial=0),
+            switches
+    ):
+        if switch is not None:
+            yield time, switch
+
+TimedCall = tuple[float, str]
+
+def timed_calls(
+        timed_switches: typing.Iterable[TimedSwitch],
+        *,
+        on: str,
+        off: str
+) -> typing.Iterable[tuple[float, str]]:
+    '''
+    Generated timed function calls.
+
+    Parameters
+    ----------
+    timed_switches
+        Switches to make and the times to make them at.
+    on
+        Function to call to make a `LightSwitch.ON` switch.
+    off
+        Function to call to make a `LightSwitch.OFF` switch.
+
+    Yields
+    ------
+    TimedCall
+        Function to call and time to call it at.
+    '''
+
+    calls: dict[LightSwitch, str] = {LightSwitch.ON: on, LightSwitch.OFF: off}
+
+    time: float
+    switch: LightSwitch
+    for time, switch in timed_switches:
+        yield time, calls[switch]
+
+def sorted_grouped_calls(
+        *args: typing.Iterable[TimedCall]
+) -> typing.Iterator[tuple[float, tuple[str, ...]]]:
+    '''
+    Group function calls by (ordered) time.
+
+    Parameters
+    ----------
+    *args
+        Functions to call and times to call them at.
+
+    Yields
+    ------
+    float
+        Time to call functions atl.
+    tuple[str, ...]
+        Functions to call at the time.
+    '''
+
+    first: typing.Callable[[TimedCall], float] = operator.itemgetter(0)
+    second: typing.Callable[[TimedCall], str] = operator.itemgetter(1)
+
+    time: float
+    group: typing.Iterator[TimedCall]
+    for time, group in itertools.groupby(
+            sorted(itertools.chain(*args), key=first),
+            key=first
+    ):
+        yield time, tuple(map(second, group))
